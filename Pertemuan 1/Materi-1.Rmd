@@ -35,8 +35,8 @@ library("TSA")
 
 ```{r}
 library(rio) #install packages jika belum ada
-data1 <- import("~/MATERI KULIAH/Semester 5/MPDW/mpdw/Pertemuan 1/Data_1.csv")
-data2 <- import("~/MATERI KULIAH/Semester 5/MPDW/mpdw/Pertemuan 1/Data_2.csv")
+data1 <- import("Data_1.csv")
+data2 <- import("Data_2.csv")
 
 #via csv gunakan read.csv("namafile.csv")
 #data1 <- read.csv("Data_1.csv")
