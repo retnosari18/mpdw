@@ -1,7 +1,7 @@
 ---
 title: "Materi-1"
 author: "Retno Sari | M0401241010"
-date: "2026-08-22"
+date: "2026-08-20"
 output: 
   rmdformats::readthedown
 editor_options: 
