@@ -1,1 +1,7 @@
-
+---
+title: "Materi 1"
+output:
+  html_document:
+    theme: lumen
+    toc: true
+    
