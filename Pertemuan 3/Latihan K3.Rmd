@@ -1,0 +1,46 @@
+---
+title: "Latihan K3"
+author: "Retno Sari | M0401241010"
+date: "2026-09-03"
+output: 
+  rmdformats::readthedown
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r}
+library(readxl)
+data2 <- read.delim("clipboard", dec = ",")
+```
+
+```{r}
+model.reg<-lm(Yt~Y.t.1.+Xt,data=data2)
+model.reg
+```
+
+```{r}
+library("dLagM")
+data <- read.delim("clipboard", dec = ",")
+model.koyck=koyckDlm(x=data$Xt, y=data$Yt)
+```
+
+```{r}
+data("USMacroG",package="AER")
+plot(USMacroG[,c("dpi","consumption")],lty=c(3,1),lwd=2,plot.type="single",ylab="")
+legend("topleft", legend=c("income","consumption"),lwd=2,lty=c(3,1),bty="n")
+```
+
+```{r}
+library("dynlm")
+cons_lm1<-dynlm(consumption~dpi+L(dpi),data=USMacroG)
+cons_lm2<-dynlm(consumption~dpi+L(consumption),data=USMacroG)
+
+summary(cons_lm1)
+summary(cons_lm2)
+```
+
+```{r}
+deviance(cons_lm1)
+deviance(cons_lm2)
+```
