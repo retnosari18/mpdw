@@ -1,0 +1,420 @@
+---
+title: "Materi-1"
+author: "Retno Sari | M0401241010"
+date: "2026-08-22"
+output: 
+  rmdformats::readthedown
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+# Gabung Data
+
+```{r}
+library(readxl)
+library(writexl)
+
+tahun <- c(2010:2021)
+file_list <- paste0(tahun, ".xlsx")
+
+data_gabung <- data.frame()
+
+for (i in seq_along(file_list)) {
+  # Baca file tanpa skip karena baris ACEH sudah berada di baris ke-4
+  temp_data <- read_excel(file_list[i], col_names = FALSE)
+  
+  # Ambil kolom 1 (Provinsi) dan kolom 2 (IPM)
+  temp_data <- temp_data[, 1:2]
+  colnames(temp_data) <- c("Provinsi", "IPM")
+  
+  # Cari posisi baris "ACEH" secara presisi agar data di atasnya (judul) terbuang bersih
+  idx_aceh <- which(trimws(toupper(temp_data$Provinsi)) == "ACEH")
+  
+  if (length(idx_aceh) > 0) {
+    # Ambil data mulai dari baris ACEH ke bawah
+    start_row <- idx_aceh[1]
+    temp_data <- temp_data[start_row:nrow(temp_data), ]
+    
+    # Hapus baris yang nilai provinsinya NA atau kosong
+    temp_data <- temp_data[!is.na(temp_data$Provinsi) & temp_data$Provinsi != "", ]
+    
+    # Tambahkan kolom Tahun
+    temp_data$Tahun <- tahun[i]
+    
+    # Gabungkan ke dataframe utama
+    if (i == 1) {
+      data_gabung <- temp_data
+    } else {
+      data_gabung <- rbind(data_gabung, temp_data)
+    }
+  }
+}
+
+# Membersihkan Data (Menangani tanda strip "-" atau sel kosong)
+data_gabung$IPM[data_gabung$IPM == "-" | data_gabung$IPM == "" | data_gabung$IPM == " "] <- NA
+
+# Mengubah tipe data kolom IPM dari karakter menjadi angka (numeric)
+data_gabung$IPM <- as.numeric(data_gabung$IPM)
+
+# Cek 10 baris pertama untuk memastikan ACEH sudah ada di paling atas
+head(data_gabung, 10)
+
+# Simpan hasil akhir yang sudah bersih
+write_xlsx(data_gabung, "Data_Tugas_Kuliah_K2.xlsx")
+```
+
+# Package
+
+```{r}
+library(readxl)
+library(lmtest)
+library(orcutt)
+```
+
+# Import Data
+
+```{r}
+data <- read_excel("Data_Tugas_Kuliah_K2.xlsx")
+
+head(data)
+```
+
+# Pilih Satu Provinsi (Kep. Riau)
+
+```{r}
+data_kr <- subset(data, Provinsi == "KEP. RIAU")
+
+data_kr
+```
+
+```{r}
+data_kr <- data_kr[order(data_kr$Tahun), ]
+
+data_kr
+```
+
+Analisis difokuskan pada **Provinsi Kepulauan Riau (KEP. RIAU)**. Data
+yang digunakan merupakan pengamatan IPM berdasarkan tahun yang tersedia
+pada dataset.
+
+# 1. Pemodelan Regresi
+
+## a. Model Regresi
+
+```{r}
+model <- lm(IPM ~ Tahun, data = data_kr)
+
+summary(model)
+```
+
+Model regresi linear digunakan untuk mengetahui hubungan antara
+**Tahun** sebagai variabel bebas dan **IPM** sebagai variabel respon.
+
+Berdasarkan hasil estimasi, diperoleh persamaan regresi:
+
+$$\hat{IPM} = -781.8167 + 0.4245 (Tahun)$$
+
+Koefisien Tahun bernilai **positif sebesar 0.4245**, sehingga setiap
+peningkatan satu tahun diperkirakan meningkatkan IPM sebesar **0.4245
+poin**, dengan asumsi hubungan linear.
+
+## b. Plot Data dan Regresi
+
+```{r}
+plot(data_kr$Tahun, data_kr$IPM,
+     xlab = "Tahun",
+     ylab = "IPM",
+     main = "Hubungan Tahun dengan IPM")
+
+abline(model)
+```
+
+Plot menunjukkan adanya **pola hubungan positif** antara tahun dan IPM.
+Garis regresi memiliki arah meningkat, yang menunjukkan bahwa secara
+umum nilai IPM KEP. RIAU cenderung meningkat seiring bertambahnya tahun.
+
+# 2. Cek Autokorelasi
+
+## a. Plot Sisaan
+
+```{r}
+plot(residuals(model),
+     type = "o",
+     xlab = "Order",
+     ylab = "Sisaan",
+     main = "Plot Sisaan")
+abline(h = 0, lty = 2)
+```
+
+Plot sisaan digunakan untuk melihat pola sisaan berdasarkan urutan
+waktu. Terlihat adanya pola pada sisaan antarperiode, sehingga terdapat
+indikasi bahwa sisaan pada suatu periode masih berkaitan dengan sisaan
+pada periode sebelumnya. Hal ini mengindikasikan adanya kemungkinan
+autokorelasi pada sisaan.
+
+Pada data ini terlihat pola pada sisaan, sehingga pemeriksaan
+autokorelasi perlu dilanjutkan menggunakan ACF dan uji Durbin-Watson.
+
+## b. ACF Sisaan
+
+```{r}
+acf(residuals(model),
+    main = "ACF Sisaan")
+```
+
+ACF digunakan untuk melihat korelasi antara sisaan pada suatu waktu
+dengan sisaan pada waktu sebelumnya.
+
+Pada hasil ACF, terdapat korelasi yang cukup kuat pada lag awal. Hal ini
+memberikan indikasi bahwa sisaan pada suatu periode masih berkaitan
+dengan sisaan pada periode sebelumnya, sehingga terdapat indikasi
+**autokorelasi positif**.
+
+## c. Uji Durbin Watson
+
+```{r}
+library(lmtest)
+
+dwtest(model)
+```
+
+Hipotesis yang digunakan adalah:
+
+$$H_0 : \rho = 0$$
+
+$$H_1 : \rho > 0$$
+
+Hasil uji Durbin-Watson menunjukkan nilai statistik **DW = 0.7724**
+dengan **p-value = 0.001426**.
+
+Karena p-value **0.001426 \< 0.05**, maka $H_0$ **ditolak**. Dengan
+demikian, terdapat **autokorelasi positif pada sisaan model regresi**.
+
+Nilai DW yang cukup jauh di bawah 2 juga mendukung adanya autokorelasi
+positif.
+
+# 3. Cochrane-Orcutt
+
+## a. Model Cochrane-Orcutt
+
+```{r}
+cochrane.model <- cochrane.orcutt(model)
+
+cochrane.model
+```
+
+Metode Cochrane-Orcutt digunakan untuk mengatasi masalah autokorelasi
+positif yang ditemukan pada model awal.
+
+## b. Lihat Rho
+
+```{r}
+cochrane.model$rho
+```
+
+Hasil estimasi menghasilkan nilai:
+
+$$\hat{\rho} = 0.651462$$
+
+Nilai $\rho$ yang positif menunjukkan adanya korelasi positif yang cukup
+kuat antara sisaan pada periode yang berurutan.
+
+## c. Lihat Koefisien
+
+```{r}
+cochrane.model$coefficients
+```
+
+Persamaan regresi setelah penanganan Cochrane-Orcutt adalah:
+
+$$\hat{IPM} = -613.2595157 + 0.3409918(Tahun)$$
+
+Koefisien Tahun sebesar **0.3409918** menunjukkan bahwa setiap
+peningkatan satu tahun diperkirakan meningkatkan IPM sebesar **0.3409918
+poin** setelah masalah autokorelasi ditangani.
+
+## d. Lihat DW setelah Cochrane-Orcutt
+
+```{r}
+cochrane.model$DW
+```
+
+Setelah dilakukan transformasi Cochrane-Orcutt, nilai DW meningkat dari
+**0.7724 menjadi 1.9483**. Nilai tersebut sudah mendekati 2, sehingga
+menunjukkan bahwa autokorelasi pada sisaan telah berkurang. Selain itu,
+p-value DW setelah transformasi sebesar **0.3150 \> 0.05**, sehingga
+$H_0$ tidak ditolak. Dengan demikian, **tidak terdapat bukti yang cukup
+adanya autokorelasi positif setelah penanganan Cochrane-Orcutt**.
+
+# 4. Hildreth-Lu
+
+## a. Fungsi Hildreth-Lu
+
+```{r}
+hildreth.lu <- function (rho, model) {
+  x <- model.matrix(model)[, -1]
+  y <- model.response(model.frame(model))
+  n <- length(y)
+  t <- 2:n
+  y <- y[t] - rho * y[t-1]
+  x <- x[t] - rho * x[t-1]
+  return(lm(y ~ x))
+}
+```
+
+Fungsi `hildreth.lu()` dibuat untuk melakukan transformasi data
+berdasarkan nilai ρ tertentu. Metode Hildreth-Lu kemudian membandingkan
+beberapa nilai $\rho$ untuk menentukan nilai yang menghasilkan **SSE
+paling kecil**.
+
+## b. Tentukan Kandidat Rho
+
+```{r}
+rho <- c(seq(0.1, 0.8, by = 0.1),
+         seq(0.90, 0.99, by = 0.01))
+
+rho
+```
+
+Beberapa kandidat nilai $\rho$ ditentukan untuk mencari nilai parameter
+autokorelasi yang paling sesuai. Kandidat awal berada pada rentang
+**0.10–0.80**, kemudian dilanjutkan dengan nilai **0.90–0.99**.
+
+## c. Hitung SSE
+
+```{r}
+tab <- data.frame(
+  rho = rho,
+  SSE = sapply(rho, function(r)
+    deviance(hildreth.lu(r, model)))
+)
+
+tab
+```
+
+Untuk setiap kandidat $\rho$ , dihitung nilai **Sum of Squared Errors
+(SSE)** setelah transformasi Hildreth-Lu.
+
+Nilai $\rho$ yang dipilih adalah nilai yang menghasilkan **SSE paling
+kecil**, karena menunjukkan model hasil transformasi dengan kesalahan
+kuadrat terkecil.
+
+## d. Cari Rho dengan SSE Minimum
+
+```{r}
+tab[tab$SSE == min(tab$SSE), ]
+```
+
+Berdasarkan tabel SSE, nilai ρ dipilih berdasarkan **SSE minimum**. Dari
+hasil pencarian, nilai $\rho$ yang memberikan SSE minimum berada di
+sekitar **0.70**, sehingga pencarian kemudian diperhalus di sekitar
+rentang tersebut.
+
+## e. Memperhalus Nilai Rho
+
+```{r}
+rho <- seq(0.70, 0.80, by = 0.01)
+
+tab <- data.frame(
+  rho = rho,
+  SSE = sapply(rho, function(r)
+    deviance(hildreth.lu(r, model)))
+)
+
+round(tab, 4)
+
+tab[tab$SSE == min(tab$SSE), ]
+```
+
+Pencarian $\rho$ diperhalus pada rentang **0.70–0.80** dengan interval
+0.01 untuk memperoleh nilai $\rho$ yang lebih presisi.
+
+## f. Rho Optimum
+
+```{r}
+rho_opt <- tab$rho[which.min(tab$SSE)]
+
+rho_opt
+```
+
+Hasil pencarian menunjukkan bahwa $\rho = 0.7$ menghasilkan SSE minimum.
+Oleh karena itu, $\rho = 0.7$ **dipilih sebagai nilai rho optimum**
+untuk model Hildreth-Lu.
+
+## g. Plot SSE vs Rho
+
+```{r}
+plot(SSE ~ rho, tab, type = "l")
+
+abline(
+  v = tab[tab$SSE == min(tab$SSE), "rho"],
+  lty = 3
+)
+```
+
+Plot menunjukkan hubungan antara nilai $\rho$ dan SSE. Nilai $\rho$
+optimum ditunjukkan oleh garis vertikal pada titik ketika **SSE mencapai
+nilai minimum**.
+
+Pada data ini, titik minimum berada pada sekitar$\rho = 0.7$ , sehingga
+nilai tersebut digunakan dalam model Hildreth-Lu.
+
+## h. Model Hildreth-Lu
+
+```{r}
+fit <- hildreth.lu(rho_opt, model)
+summary(fit)
+dwtest(fit)
+```
+
+Berdasarkan metode Hildreth-Lu dengan nilai $\rho\ optimum$ sebesar 0.7,
+diperoleh model hasil transformasi dengan koefisien Tahun sebesar
+0.32458 dan p-value sebesar 0.0001123, sehingga terdapat hubungan linear
+yang signifikan antara Tahun dan IPM.
+
+## i. Uji DW setelah Hildreth-Lu
+
+```{r}
+dwtest(fit)
+```
+
+Setelah dilakukan penanganan autokorelasi menggunakan metode
+Hildreth-Lu, nilai DW meningkat menjadi sekitar **2.004** dengan p-value
+sebesar 0.3509. Karena p-value \> 0.05, maka $H_0$ tidak ditolak.
+
+Nilai tersebut sangat dekat dengan 2, sehingga menunjukkan bahwa
+**autokorelasi pada sisaan telah berhasil dikurangi**. Dengan demikian,
+model hasil transformasi Hildreth-Lu sudah jauh lebih memenuhi asumsi
+tidak adanya autokorelasi dibandingkan model awal.
+
+## j. Persamaan Regresi setelah Hildreth-Lu/Transformasi Balik
+
+```{r}
+cat("IPM =", coef(fit)[2], "Tahun +",
+    coef(fit)[1] / (1 - rho_opt), sep = "")
+```
+
+Hasil transformasi kembali memberikan persamaan regresi pada skala awal:
+
+$$\hat{IPM} = -580.0881 + 0.3245758(Tahun)$$
+
+besar **0.3245758** menunjukkan bahwa setiap kenaikan satu tahun
+diperkirakan meningkatkan IPM sekitar **0.3245758** **poin**, setelah
+masalah autokorelasi ditangani menggunakan metode Hildreth-Lu.
+
+# 5. Kesimpulan
+
+Berdasarkan hasil analisis regresi IPM terhadap Tahun pada Provinsi
+Kepulauan Riau, diperoleh indikasi adanya autokorelasi positif pada
+sisaan. Hal ini didukung oleh hasil uji Durbin-Watson yang menghasilkan
+nilai DW sebesar **0.77240** dengan p-value **0.001426**, sehingga $H_0$
+ditolak dan terdapat autokorelasi positif pada sisaan. Penanganan
+autokorelasi dilakukan menggunakan metode Cochrane-Orcutt dan
+Hildreth-Lu. Cochrane-Orcutt menghasilkan estimasi $\rho$ sebesar
+**0.6514619** dan meningkatkan nilai DW menjadi **1.94827218**.
+Sementara itu, metode Hildreth-Lu menghasilkan nilai $\rho$ optimum
+sebesar **0.7** berdasarkan SSE minimum dan nilai DW sebesar **2.004**.
+Kedua metode menghasilkan nilai DW yang mendekati 2, sehingga dapat
+disimpulkan bahwa penanganan autokorelasi berhasil mengurangi masalah
+autokorelasi pada sisaan model.
