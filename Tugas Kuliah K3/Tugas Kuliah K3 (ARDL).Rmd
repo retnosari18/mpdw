@@ -1,0 +1,1118 @@
+---
+title: "Tugas Kuliah K3 (ARDL)"
+author: "Retno Sari | M0401241010"
+date: "2026-09-09"
+output: 
+  rmdformats::readthedown
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+# 1. Library
+
+```{r}
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(corrplot)
+library(forecast)
+library(nardl)
+library(dLagM)
+library(ARDL)
+library(dynamac)
+library(car)
+library(lmtest)
+library(tseries)
+library(moments)
+library(patchwork)
+library(openxlsx)
+library(writexl)
+```
+
+# 2. Import Data
+
+```{r}
+dataset <- read_excel("Data_Harian_2022_2024.xlsx")
+
+dataset$Date <- as.Date(dataset$Date)
+
+str(dataset)
+```
+
+Data yang digunakan merupakan data harian yang terdiri atas:
+
+- **TMA** = Tinggi Muka Air (cm), sebagai peubah respon.
+
+- **PC** = Curah Hujan (mm/jam), sebagai peubah penjelas pertama.
+
+- **RH** = Kelembapan Relatif (%), sebagai peubah penjelas kedua.
+
+Dalam analisis ini hanya digunakan PC dan RH sebagai peubah penjelas
+karena keduanya memiliki hubungan linear yang lebih kuat dengan TMA
+dibandingkan TM dan WS.
+
+# 3. **Eksplorasi Data**
+
+## 3.1 **Statistika Deskriptif Dasar**
+
+### **3.1.1 Statistika Deskriptif Dasar**
+
+```{r}
+summary(dataset)
+```
+
+### 3.1.2 Standard Deviation
+
+```{r}
+sd_tma <- sd(dataset$TMA, na.rm = TRUE)
+sd_pc <- sd(dataset$PC, na.rm = TRUE)
+sd_rh <- sd(dataset$RH, na.rm = TRUE)
+
+cat("Standard deviation TMA:", sd_tma, "\n")
+cat("Standard deviation PC:", sd_pc, "\n")
+cat("Standard deviation RH:", sd_rh, "\n")
+```
+
+> Nilai standar deviasi TMA sebesar **39.45**, PC sebesar **8.84**, dan
+> RH sebesar **4.71**. Hal ini menunjukkan bahwa TMA memiliki penyebaran
+> data paling besar dibandingkan PC dan RH.
+
+### 3.1.3 Skewness
+
+```{r}
+skew_tma <- skewness(dataset$TMA, na.rm = TRUE)
+skew_pc <- skewness(dataset$PC, na.rm = TRUE)
+skew_rh <- skewness(dataset$RH, na.rm = TRUE)
+
+cat("Skewness TMA:", skew_tma, "\n")
+cat("Skewness PC:", skew_pc, "\n")
+cat("Skewness RH:", skew_rh, "\n")
+```
+
+> Nilai skewness TMA sebesar **0.53** menunjukkan distribusi sedikit
+> menjulur ke kanan. PC memiliki skewness sebesar **5.07** yang
+> menunjukkan kemenjuluran ke kanan yang sangat kuat. Sementara itu, RH
+> memiliki skewness sebesar **-0.99** yang menunjukkan sebaran menjulur
+> ke kiri.
+
+### 3.1.4 Kurtosis
+
+```{r}
+kurt_tma <- kurtosis(dataset$TMA, na.rm = TRUE)
+kurt_pc <- kurtosis(dataset$PC, na.rm = TRUE)
+kurt_rh <- kurtosis(dataset$RH, na.rm = TRUE)
+
+cat("Kurtosis TMA:", kurt_tma, "\n")
+cat("Kurtosis PC:", kurt_pc, "\n")
+cat("Kurtosis RH:", kurt_rh, "\n")
+```
+
+> Nilai kurtosis TMA sebesar **2.98** menunjukkan sebaran yang mendekati
+> distribusi normal. PC memiliki kurtosis sebesar **62.20**, yang
+> menunjukkan adanya ekor sebaran yang sangat berat dan kemungkinan
+> terdapat nilai ekstrem. RH memiliki kurtosis sebesar **4.03**, yang
+> menunjukkan sebaran dengan ekor yang lebih berat dibandingkan sebaran
+> normal.
+
+## 3.2 **Time Series**
+
+### 3.2.1 Plot Time Series TMA
+
+```{r}
+ggplot(data = dataset, aes(x = Date, y = TMA)) +
+  geom_line() +
+  labs(title = "Time Series Plot of TMA", x = "Date", y = "TMA") +
+  theme_minimal()
+```
+
+### 3.2.2 Plot Time Series PC
+
+```{r}
+ggplot(data = dataset, aes(x = Date, y = PC)) +
+  geom_line() +
+  labs(title = "Time Series Plot of PC", x = "Date", y = "PC") +
+  theme_minimal()
+```
+
+### 3.2.3 Plot Time Series RH
+
+```{r}
+ggplot(data = dataset, aes(x = Date, y = RH)) +
+  geom_line() +
+  labs(title = "Time Series Plot of RH", x = "Date", y = "RH") +
+  theme_minimal()
+```
+
+### 3.2.4 Plot Time Series Gabungan
+
+```{r}
+# Ubah data menjadi long format
+data_long <- dataset %>%
+  pivot_longer(cols = c(TMA, PC, RH),
+               names_to = "Variabel",
+               values_to = "Nilai")
+
+# Membuat plot dengan facet_wrap
+ggplot(data_long, aes(x = Date, y = Nilai)) +
+  geom_line() +
+  facet_wrap(~ Variabel, scales = "free_y", ncol = 2) + 
+  labs(title = "Time Series Plot of Multiple Variables",
+       x = "Date",
+       y = "Value") +
+  theme_minimal()
+```
+
+- Data menunjukkan bahwa baik satu peubah respon maupun dua peubah
+  penjelas tidak memiliki pola musiman atau siklus yang konsisten.
+
+- Peubah penjelas PC memiliki sebaran yang tinggi saat akhir tahun,
+  menunjukkan lonjakan ekstrem melebihi 100 mm/jam dalam sehari.
+
+- Peubah penjelas RH berfluktuasi pada kisaran sekitar 70–95 dan
+  mengalami penurunan pada beberapa periode.
+
+- Peubah respon atau TMA juga memiliki pola yang tidak beraturan namun
+  beberapa puncaknya cenderung berdekatan dengan puncak curah hujan.
+
+Secara keseluruhan, ketiga variabel menunjukkan **fluktuasi yang cukup
+besar sepanjang periode pengamatan**. PC memiliki beberapa lonjakan
+ekstrem, RH mengalami perubahan level pada beberapa periode, sedangkan
+TMA menunjukkan perubahan naik-turun yang cukup tajam. Dari plot ini
+belum terlihat pola musiman yang konsisten, sehingga diperlukan analisis
+lebih lanjut mengenai **kestasioneran data** sebelum dilakukan pemodelan
+ARDL.
+
+## 3.3 Matriks Korelasi
+
+```{r}
+cor_matrix <- cor(dataset[, c("TMA", "PC", "RH")], use = "complete.obs")
+cor_matrix
+```
+
+```{r}
+corrplot(cor_matrix, method = "color", addCoef.col = "black",
+         tl.col = "black", tl.srt = 50, number.cex = 0.8,
+         title = "Matriks Korelasi",
+         mar = c(0,0,1,0))
+```
+
+PC memiliki korelasi positif dengan TMA sebesar **0.39**, sedangkan RH
+memiliki korelasi positif sebesar **0.53**. Artinya, RH memiliki
+hubungan linear yang lebih kuat dengan TMA dibandingkan PC.
+
+# 4. Data Splitting
+
+```{r}
+total_rows <- 1096
+test_size <- 160
+
+train_index <- 1:(total_rows - test_size)
+test_index  <- (total_rows - test_size + 1):total_rows
+
+train_2225 <- dataset[train_index, ]
+test_2225  <- dataset[test_index, ]
+str(train_2225)
+str(test_2225)
+```
+
+```{r}
+train_2225.ts<-ts(train_2225)
+test_2225.ts<-ts(test_2225)
+```
+
+- Berdasarkan pola data, data dibagi menjadi data train sebesar 86% dari
+  total data atau sebanyak 936 data dan data test sebesar 14% dari total
+  data atau sebanyak 160 data.
+
+## 4.1 **Time Series Data Split**
+
+```{r}
+train_2225 <- train_2225 %>%
+  mutate(DataType = "Train")
+
+test_2225 <- test_2225 %>%
+  mutate(DataType = "Test")
+```
+
+### 4.1.1 Plot Time Series TMA
+
+```{r}
+combined_data <- bind_rows(train_2225, test_2225)
+data_long <- combined_data %>%
+  pivot_longer(cols = c(TMA), 
+               names_to = "Variabel",
+               values_to = "Nilai")
+
+ggplot(data_long, aes(x = Date, y = Nilai, color = DataType)) +
+  geom_line() +
+  facet_wrap(~ Variabel, scales = "free_y", ncol = 2) +
+  scale_color_manual(values = c("Train" = "#00BFC4", "Test" = "#F8766D")) +
+  labs(title = "Time Series of TMA (Train vs. Test)",
+       x = "Date",
+       y = "Tinggi Muka Air (cm)",
+       color = "Data Type") +
+  theme_minimal()
+```
+
+### 4.1.2 Plot Time Series PC
+
+```{r}
+combined_data <- bind_rows(train_2225, test_2225)
+data_long <- combined_data %>%
+  pivot_longer(cols = c(PC), 
+               names_to = "Variabel",
+               values_to = "Nilai")
+
+ggplot(data_long, aes(x = Date, y = Nilai, color = DataType)) +
+  geom_line() +
+  facet_wrap(~ Variabel, scales = "free_y", ncol = 2) +
+  scale_color_manual(values = c("Train" = "#00BFC4", "Test" = "#F8766D")) +
+  labs(title = "Time Series of PC (Train vs. Test)",
+       x = "Date",
+       y = "Curah Hujan (mm/jam)",
+       color = "Data Type") +
+  theme_minimal()
+```
+
+### 4.1.3 Plot Time Series RH
+
+```{r}
+combined_data <- bind_rows(train_2225, test_2225)
+data_long <- combined_data %>%
+  pivot_longer(cols = c(RH), 
+               names_to = "Variabel",
+               values_to = "Nilai")
+
+ggplot(data_long, aes(x = Date, y = Nilai, color = DataType)) +
+  geom_line() +
+  facet_wrap(~ Variabel, scales = "free_y", ncol = 2) +
+  scale_color_manual(values = c("Train" = "#00BFC4", "Test" = "#F8766D")) +
+  labs(title = "Time Series of RH (Train vs. Test)",
+       x = "Date",
+       y = "Kelembapan Relatif (persen)",
+       color = "Data Type") +
+  theme_minimal()
+```
+
+### 4.1.4 Plot Time Series Gabungan
+
+```{r}
+combined_data <- bind_rows(train_2225, test_2225)
+data_long <- combined_data %>%
+  pivot_longer(cols = c(TMA, PC, RH), 
+               names_to = "Variabel",
+               values_to = "Nilai")
+
+ggplot(data_long, aes(x = Date, y = Nilai, color = DataType)) +
+  geom_line() +
+  facet_wrap(~ Variabel, scales = "free_y", ncol = 2) +
+  scale_color_manual(values = c("Train" = "#00BFC4", "Test" = "#F8766D")) +
+  labs(title = "Time Series of Multiple Variables (Train vs. Test)",
+       x = "Date",
+       y = "Value",
+       color = "Data Type") +
+  theme_minimal()
+```
+
+- **PC:** Data train dan test menunjukkan pola yang relatif serupa,
+  meskipun terdapat beberapa lonjakan ekstrem pada data train.
+- **RH:** Data train dan test sama-sama berfluktuasi, dengan rentang
+  nilai yang relatif serupa.
+- **TMA:** Data train dan test memiliki pola fluktuasi yang cukup
+  serupa, meskipun terdapat beberapa perubahan nilai yang cukup tajam.
+
+# 5. **Kestasioneran Data**
+
+## 5.1 Plot ACF
+
+### 5.1.1 Plot ACF TMA
+
+```{r}
+acf_TMA <- ggAcf(train_2225$TMA) + labs(title = "ACF TMA")
+acf_TMA
+```
+
+- Plot ACF TMA menurun secara perlahan: TMA tidak stasioner
+
+```{r}
+acf_TMA <- ggAcf(train_2225$TMA) +
+  labs(title = "ACF TMA") +
+  theme(
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14)
+  )
+acf_TMA
+```
+
+### 5.1.2 Plot ACF PC
+
+```{r}
+acf_PC <- ggAcf(train_2225$PC) + labs(title = "ACF PC")
+acf_PC
+```
+
+- Plot ACF PC menurun secara perlahan: PC tidak stasioner
+
+```{r}
+acf_PC <- ggAcf(train_2225$PC) +
+  labs(title = "ACF PC") +
+  theme(
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14)
+  )
+acf_PC
+```
+
+### 5.1.3 Plot ACF RH
+
+```{r}
+acf_RH <- ggAcf(train_2225$RH) + labs(title = "ACF RH")
+acf_RH
+```
+
+- Plot ACF RH menurun secara perlahan: RH tidak stasioner
+
+```{r}
+acf_RH <- ggAcf(train_2225$RH) +
+  labs(title = "ACF RH") +
+  theme(
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14)
+  )
+acf_RH
+```
+
+### 5.1.4 Plot ACF Gabungan
+
+```{r}
+combined_acf <- acf_TMA + acf_PC + acf_RH 
+combined_acf
+```
+
+- Semua peubah tidak stasioner
+
+## 5.2 Plot PACF
+
+### 5.2.1 Plot PACF TMA
+
+```{r}
+pacf_TMA <- ggPacf(train_2225$TMA) + labs(title = "PACF TMA")
+pacf_TMA
+```
+
+- Lag p antara 1 sampai 3, karena PACF memotong cut-off setelah lag-3
+
+### 5.2.2 Plot PACF PC
+
+```{r}
+pacf_PC <- ggPacf(train_2225$PC) + labs(title = "PACF PC")
+pacf_PC
+```
+
+### 5.2.2 Plot PACF RH
+
+```{r}
+pacf_RH <- ggPacf(train_2225$RH) + labs(title = "PACF RH")
+pacf_RH
+```
+
+### 5.2.4 Plot PACF Gabungan
+
+```{r}
+combined_pacf <- pacf_TMA + pacf_PC + pacf_RH 
+combined_pacf
+```
+
+- **TMA:** PACF menunjukkan korelasi parsial paling kuat pada **lag 1**,
+  kemudian menurun pada lag berikutnya.
+- **PC:** Korelasi parsial paling kuat pada **lag 1**, dengan beberapa
+  lag berikutnya masih menunjukkan nilai yang relatif kecil.
+- **RH:** PACF paling kuat pada **lag 1**, kemudian cenderung menurun
+  pada lag berikutnya.
+
+Ketiga peubah menunjukkan adanya **ketergantungan terhadap nilai masa
+lalu**, terutama pada lag awal.
+
+## 5.3 Uji ADF
+
+### 5.3.1 Uji ADF TMA
+
+```{r}
+adf.test(train_2225$TMA)
+```
+
+- TMA stasioner secara uji formal
+
+### 5.3.2 Uji ADF PC
+
+```{r}
+adf.test(train_2225$PC)
+```
+
+- PC stasioner secara uji formal
+
+### 5.3.3 Uji ADF RH
+
+```{r}
+adf.test(train_2225$RH)
+```
+
+- RH tidak stasioner secara uji formal
+
+# 6. **First Difference**
+
+## 6.1 Differencing
+
+```{r}
+DTMA <- diff(train_2225$TMA, differences = 1)
+DPC <- diff(train_2225$PC, differences = 1)
+DRH <- diff(train_2225$RH, differences = 1)
+
+# Gabungkan dalam dataframe
+df <- data.frame(DTMA, DPC, DRH)
+df.ts<-ts(df)
+head(df)
+```
+
+## 6.2 Plot ACF
+
+### 6.2.1 Plot ACF DTMA
+
+```{r}
+acf_DTMA <- ggAcf(DTMA) + labs(title = "ACF DTMA")
+acf_DTMA
+```
+
+- Plot ACF DTMA tidak menurun secara perlahan: TMA stasioner
+
+```{r}
+acf_DTMA <- ggAcf(DTMA) +
+  labs(title = "ACF DTMA") +
+  theme(
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14)
+  )
+acf_DTMA
+```
+
+### 6.2.2 Plot ACF DPC
+
+```{r}
+acf_DPC <- ggAcf(DPC) + labs(title = "ACF DPC")
+acf_DPC
+```
+
+- Plot ACF DPC tidak menurun secara perlahan : PC stasioner
+
+```{r}
+acf_DPC <- ggAcf(DPC) +
+  labs(title = "ACF DPC") +
+  theme(
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14)
+  )
+acf_DPC
+```
+
+### 6.2.3 Plot ACF DRH
+
+```{r}
+acf_DRH <- ggAcf(DRH) + labs(title = "ACF DRH")
+acf_DRH
+```
+
+- Plot ACF DRH menurun secara perlahan: DRH stasioner
+
+```{r}
+acf_DRH <- ggAcf(DRH) +
+  labs(title = "ACF DRH") +
+  theme(
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14)
+  )
+acf_DRH
+```
+
+### 6.2.4 Plot ACF Gabungan
+
+```{r}
+combined_acf <- acf_DTMA + acf_DPC + acf_DRH 
+combined_acf
+```
+
+- **DTMA:** ACF menunjukkan korelasi negatif kuat pada **lag 1**,
+  kemudian sebagian besar lag berada dalam batas signifikansi.
+- **DPC:** ACF didominasi korelasi negatif pada **lag 1**, sementara lag
+  berikutnya relatif kecil.
+- **DRH:** ACF menunjukkan korelasi negatif kuat pada **lag 1**,
+  kemudian menurun pada lag berikutnya.
+
+Setelah dilakukan *first difference*, korelasi antarperiode menjadi
+lebih kecil dan data cenderung lebih stasioner.
+
+## 6.3 **Plot PACF**
+
+### 6.3.1 Plot PACF DTMA (Lag optimum peubah respon)
+
+```{r}
+pacf_DTMA <- ggPacf(DTMA) + labs(title = "PACF DTMA")
+pacf_DTMA
+```
+
+- Lag p antara 1 sampai 8, karena PACF memotong cut-off setelah lag-8
+
+```{r}
+pacf_DTMA <- ggPacf(DTMA) +
+  labs(title = "PACF DTMA") +
+  theme(
+    axis.text.x = element_text(size = 14),
+    axis.text.y = element_text(size = 14)
+  )
+pacf_DTMA
+```
+
+### 6.3.2 Plot PACF DPC
+
+```{r}
+pacf_DPC <- ggPacf(DPC) + labs(title = "PACF DPC")
+pacf_DPC
+```
+
+### 6.3.3 Plot PACF DRH
+
+```{r}
+pacf_DRH <- ggPacf(DRH) + labs(title = "PACF DRH")
+pacf_DRH
+```
+
+### 6.3.4 Plot PACF Gabungan
+
+```{r}
+combined_pacf <- pacf_DTMA + pacf_DPC + pacf_DRH 
+combined_pacf
+```
+
+- **DTMA:** Korelasi parsial paling kuat pada **lag 1**, kemudian
+  cenderung menurun.
+
+-  **DPC:** Korelasi parsial paling kuat pada **lag 1**, dengan beberapa
+  lag berikutnya masih signifikan.
+
+-  **DRH:** Korelasi parsial paling kuat pada **lag 1**, kemudian
+  menurun pada lag berikutnya.
+
+Ketiga peubah memiliki ketergantungan terhadap nilai masa lalu, terutama
+pada **lag 1**, setelah dilakukan *first difference*.
+
+## 6.4 Uji ADF
+
+### 6.4.1 Uji ADF DTMA
+
+```{r}
+adf.test(DTMA)
+```
+
+- TMA stasioner secara uji formal
+
+### 6.4.2 Uji ADF DPC
+
+```{r}
+adf.test(DPC)
+```
+
+- PC stasioner secara uji formal
+
+### 6.4.3 Uji ADF DRH
+
+```{r}
+adf.test(DRH)
+```
+
+- RH stasioner secara uji formal
+
+## 6.5 **Plot CCF (Lag optimum peubah penjelas)**
+
+### 6.5.1 Plot CCF DTMA dan DPC
+
+```{r}
+ccf_result1 <- ggCcf(DTMA, DPC, lag.max=9)+ggtitle("CCF antara DTMA dan DPC")
+ccf_result1
+```
+
+- Lag optimum q1 = 1
+
+```{r}
+ccf_result1 <- ggCcf(DTMA, DPC, lag.max = 9) +
+  ggtitle("CCF antara DTMA dan DPC") +
+  theme(
+    axis.text.x = element_text(size = 14),  # Besarkan angka di sumbu X
+    axis.text.y = element_text(size = 14)   # Besarkan angka di sumbu Y
+  )
+ccf_result1
+```
+
+### 6.5.2 Plot CCF DTMA dan DRH
+
+```{r}
+ccf_result2 <- ggCcf(DTMA, DRH, lag.max=9, plot = TRUE)+ggtitle("CCF antara DTMA dan DRH")
+ccf_result2
+```
+
+- Lag optimum q3 = 1
+
+```{r}
+ccf_result2 <- ggCcf(DTMA, DRH, lag.max = 9) +
+  ggtitle("CCF antara DTMA dan DRH") +
+  theme(
+    axis.text.x = element_text(size = 14),  # Besarkan angka di sumbu X
+    axis.text.y = element_text(size = 14)   # Besarkan angka di sumbu Y
+  )
+
+ccf_result2
+```
+
+### 6.5.3 Plot CCF Gabungan
+
+```{r}
+# Menggabungkan plot dalam satu baris
+combined_ccf <- ccf_result1 + ccf_result2 
+
+# Mencetak plot gabungan
+print(combined_ccf)
+```
+
+- **DTMA dan DPC:** Korelasi silang paling kuat terdapat pada **lag 1
+  (positif)** dan **lag -1 (negatif)**. Beberapa lag lainnya juga
+  menunjukkan korelasi yang signifikan.
+
+-  **DTMA dan DRH:** Korelasi silang paling kuat terdapat pada **lag 0
+  dan lag 1**, keduanya positif dan signifikan. Terdapat pula korelasi
+  negatif signifikan pada **lag -3**.
+
+Kedua peubah penjelas memiliki hubungan silang dengan DTMA pada beberapa
+lag, dengan **DRH menunjukkan hubungan positif yang jelas pada lag 0 dan
+1**.
+
+### 6.5.4 Nilai Korelasi CCF
+
+```{r}
+ccf_result1 <- ccf(DTMA, DPC, lag.max=9, plot = TRUE)
+
+lags1 <- ccf_result1$lag
+correlations1 <- ccf_result1$acf
+```
+
+```{r}
+ccf_result2 <- ccf(DTMA, DRH, lag.max=9, plot = TRUE)
+
+lags2 <- ccf_result2$lag
+correlations2 <- ccf_result2$acf
+```
+
+```{r}
+# Buat data frame untuk setiap CCF
+ccf_df1 <- data.frame(Lag = lags1, Correlation = correlations1, Pair = "DTMA vs DPC")
+ccf_df2 <- data.frame(Lag = lags2, Correlation = correlations2, Pair = "DTMA vs DRH")
+
+# Gabungkan semua data frame menjadi satu
+ccf_all_df <- rbind(ccf_df1, ccf_df2)
+ccf_all_df
+```
+
+**CCF DTMA dan DPC**
+
+Korelasi silang terbesar terdapat pada **lag 1 sebesar 0,2581**,
+menunjukkan hubungan positif antara DTMA dan DPC pada lag tersebut. Pada
+**lag -1** terdapat korelasi negatif sebesar **-0,2069**. Beberapa lag
+lainnya memiliki korelasi yang relatif kecil.
+
+**CCF DTMA dan DRH**
+
+Korelasi silang terbesar terdapat pada **lag 1 sebesar 0,0960**, diikuti
+**lag 0 sebesar 0,0936**, yang menunjukkan hubungan positif antara DTMA
+dan DRH pada kedua lag tersebut. Pada **lag -3** terdapat korelasi
+negatif sebesar **-0,0760**.
+
+> Secara umum, hubungan silang DTMA dengan **DPC lebih kuat**
+> dibandingkan dengan DRH, terutama pada **lag 1**.
+
+# 7. **Dynardl (dynmac)**
+
+## 7.1 Uji Kointegrasi
+
+```{r}
+modelbound <- ardlBound(data = train_2225 , formula = TMA ~ PC + RH, case = 2 , max.p = 1, max.q = 9)
+```
+
+Nilai F-statistic sebesar 31.6584 lebih besar dari batas atas I(1)
+sebesar 5.00 pada taraf 1%, sehingga terdapat hubungan kointegrasi
+antara TMA, PC, dan RH.
+
+## 7.2 Model
+
+### 7.2.1 Jangka Pendek
+
+```{r}
+modelardl <- dynardl(
+  DTMA ~ DPC + DRH,
+  data = df,
+  lags = list(
+    "DTMA" = 1:9,
+    "DPC" = 1,
+    "DRH" = 1
+  ),
+  ec = TRUE
+)
+
+summary(modelardl)
+AIC(modelardl$model)
+```
+
+Model jangka pendek menunjukkan bahwa **DPC berpengaruh positif dan
+signifikan terhadap DTMA** dengan koefisien 0.72043 (p-value \< 0.05).
+**DRH juga berpengaruh positif dan signifikan terhadap DTMA** dengan
+koefisien 0.62171 (p-value = 0,0367). Selain itu, beberapa lag DTMA (lag
+1–7) berpengaruh signifikan terhadap DTMA saat ini.
+
+### 7.2.2 Jangka Panjang
+
+```{r}
+modelardll <- dynardl(
+  formula = TMA ~ PC + RH,
+  data = train_2225,
+  levels = c("PC", "RH"),
+  ec = FALSE,
+)
+
+summary(modelardll)
+AIC(modelardll$model)
+```
+
+Dalam jangka panjang, **PC berpengaruh positif dan signifikan terhadap
+TMA** dengan koefisien 0.83239, sedangkan **RH berpengaruh positif dan
+signifikan terhadap TMA** dengan koefisien 1.00643. Keduanya memiliki
+p-value \< 0.05, sehingga PC dan RH berpengaruh signifikan terhadap TMA
+dalam jangka panjang.
+
+## 7.3 Uji Asumsi
+
+### 7.3.1 Uji Autokorelasi Residual (Box-Ljung Test)
+
+```{r}
+res1 <- residuals(modelardl$model)
+Box.test(res1, lag = 20, type = "Ljung-Box")
+```
+
+**Hipotesis:**
+
+$$H_0 : Tidak \ ada \ autokorelasi \ dalam \ residual \\ H_1 : Terdapat \ autokorelasi \ dalam \ residual$$
+
+Kesimpulan: *p-value* = 0.5193 (\>0.05) tak tolak $H_0$, tidak ada bukti
+signifikan autokorelasi dalam residual model.
+
+### 7.3.2 Uji Normalitas (Jarque-Bera Test)
+
+```{r}
+jarque.bera.test(res1)
+```
+
+Hipotesis:
+
+$$H_0 : Data \ residual \ berdistribusi \ normal \\ H_1 : Data \ residual \ tidak \ berdistribusi \ normal$$
+
+Kesimpulan: p-value = $2.2e^{-16}$ (\< 0.05). Tolak $H_0$, residual
+tidak berdistribusi normal.
+
+### 7.3.3. Uji Heterokedastisitas (Breusch-Pagan Test)
+
+```{r}
+fitted_val1 <- fitted(modelardl$model)
+bptest(res1 ~ fitted_val1)
+```
+
+Hipotesis:
+
+$$H_0 : Residual \ memiliki \ varians \ yang \ konstan \ (homoskedastis) \\ H_1 : Residual \ memiliki \ varians \ yang \ tidak \ konstan \ (heterokedastis)$$
+
+Kesimpulan: p-value = 0.243 (\> 0.05), tak tolak $H_0$, residual
+memiliki varians yang konstan (homoskedastis).
+
+### 7.3.4 Multikolinearitas
+
+```{r}
+vif(modelardl$model)
+```
+
+- Lag DTMA: **1.25–1.69**
+
+-  Lag DPC: **1.15**
+
+-  Lag DRH: **1.10**
+
+> Seluruh nilai VIF berada di bawah **10**, sehingga tidak terdapat
+> indikasi **multikolinearitas** antarpeubah dalam model.
+
+## 7. 4 Forecasting
+
+### 7.4.1 Data Training
+
+```{r}
+# Differencing
+DTMA <- diff(train_2225$TMA, differences = 1)
+DPC  <- diff(train_2225$PC, differences = 1)
+DRH  <- diff(train_2225$RH, differences = 1)
+
+# Gabungkan menjadi data.frame
+train_baru <- data.frame(DPC, DRH)
+colnames(train_baru) <- c("DPC", "DRH")
+```
+
+```{r}
+coefs <- summary(modelardl)$coefficients
+
+intercept <- coefs["(Intercept)", "Estimate"]
+b1 <- coefs["l.1.DPC", "Estimate"]
+b2 <- coefs["l.1.DRH", "Estimate"]
+```
+
+```{r}
+train_baru$DTMA_pred <- intercept +
+  b1 * train_baru$DPC +
+  b2 * train_baru$DRH 
+```
+
+```{r}
+# TMA ke-n = TMA ke-(n-1) + delta TMA ke-n
+train_baru$TMA_pred <- NA
+train_baru$TMA_pred[1] <- train_2225$TMA[1] + train_baru$DTMA_pred[1]
+
+for(i in 2:nrow(train_baru)) {
+  train_baru$TMA_pred[i] <- train_baru$TMA_pred[i-1] + train_baru$DTMA_pred[i]
+}
+```
+
+```{r}
+TMA_actual <- train_2225$TMA[-1]  # karena ada differencing
+TMA_pred <- train_baru$TMA_pred
+```
+
+```{r}
+plot(TMA_actual, type = "l", col = "black", main = "Train: Actual vs Predicted TMA")
+lines(TMA_pred, col = "blue")
+legend("topleft", legend = c("Actual", "Predicted"), col = c("black", "blue"), lty = 1)
+```
+
+```{r}
+# Evaluasi
+MAE <- mean(abs(TMA_pred - TMA_actual), na.rm = TRUE)
+RMSE <- sqrt(mean((TMA_pred - TMA_actual)^2, na.rm = TRUE))
+MAPE <- mean(abs((TMA_actual - TMA_pred) / TMA_actual), na.rm = TRUE) * 100
+
+cat("MAE:", MAE, "\n")
+cat("RMSE:", RMSE, "\n")
+cat("MAPE:", MAPE, "%\n")
+```
+
+Model menghasilkan MAPE sebesar 5.13%, yang menunjukkan tingkat
+kesalahan prediksi relatif rendah. Namun, secara visual prediksi belum
+mampu mengikuti seluruh fluktuasi dan lonjakan ekstrem pada data aktual.
+
+### 7.4.2 Data Testing
+
+```{r}
+str(test_2225)
+```
+
+```{r}
+summary(test_2225)
+```
+
+```{r}
+TDPC <- diff(test_2225$PC, differences = 1)
+TDRH <- diff(test_2225$RH, differences = 1)
+
+test_baru <- data.frame(TDPC, TDRH)
+```
+
+```{r}
+colnames(test_baru) <- c("DPC", "DRH")
+```
+
+```{r}
+coefs <- summary(modelardl)$coefficients
+coefs
+```
+
+```{r}
+intercept <- coefs["(Intercept)", "Estimate"]
+b1 <- coefs["l.1.DPC", "Estimate"]
+b2 <- coefs["l.1.DRH", "Estimate"]
+```
+
+```{r}
+test_baru$DTMA_pred <- intercept +
+  b1 * test_baru$DPC +
+  b2 * test_baru$DRH 
+```
+
+```{r}
+last_TMA_train <- tail(train_2225$TMA, 1)
+last_TMA_train
+```
+
+```{r}
+test_baru$TMA_pred <- NA
+test_baru$TMA_pred[1] <- last_TMA_train + test_baru$DTMA_pred[1]
+
+for(i in 2:nrow(test_baru)) {
+  test_baru$TMA_pred[i] <- test_baru$TMA_pred[i-1] + test_baru$DTMA_pred[i]
+}
+```
+
+```{r}
+TMA_actual <- test_2225$TMA[-1]  # karena differencing
+TMA_pred <- test_baru$TMA_pred
+
+mse <- mean((TMA_actual - TMA_pred)^2, na.rm = TRUE)
+rmse <- sqrt(mse)
+```
+
+```{r}
+date_seq <- seq.Date(from = as.Date("2024-07-25"), by = "day", length.out = length(TMA_pred))
+```
+
+```{r}
+plot(TMA_actual, type = "l", col = "black", main = "Actual vs Predicted TMA")
+lines(TMA_pred, col = "blue")
+legend("topleft", legend = c("Actual", "Predicted"), col = c("black", "blue"), lty = 1)
+```
+
+```{r}
+plot(date_seq, TMA_actual, type = "l", col = "black", 
+     main = "Actual vs Predicted TMA", xlab = "Tanggal", ylab = "TMA")
+lines(date_seq, TMA_pred, col = "blue")
+legend("topleft", legend = c("Actual", "Predicted"), 
+       col = c("black", "blue"), lty = 1)
+```
+
+```{r}
+# Asumsikan 'aktual_Y_test' adalah nilai Y aktual dari data testing
+MAE <- mean(abs(TMA_pred - TMA_actual))
+RMSE <- sqrt(mean((TMA_pred - TMA_actual)^2))
+# Hitung MAPE jika nilai aktual Y tidak nol
+MAPE <- mean(abs((TMA_actual - TMA_pred) / TMA_actual)) * 100
+
+cat("MAE:", MAE, "\n")
+cat("RMSE:", RMSE, "\n")
+cat("MAPE:", MAPE, "%\n")
+```
+
+Pada data testing, model menghasilkan MAE sebesar 18.03, RMSE sebesar
+24.49, dan MAPE sebesar 2.82%. Hal ini menunjukkan bahwa model memiliki
+tingkat kesalahan prediksi yang relatif rendah pada data testing,
+meskipun beberapa lonjakan ekstrem pada TMA belum dapat ditangkap dengan
+baik.
+
+### 7.4.3 Prediksi 2025
+
+```{r}
+data_prediksi_15 <- read_excel("Data_Jan22_Mar25.xlsx")
+data_prediksi_15 <- tail(data_prediksi_15, 120)
+data_prediksi_15$Date <- as.Date(data_prediksi_15$Date)
+str(data_prediksi_15)
+```
+
+```{r}
+DPC_15 <- diff(data_prediksi_15$PC, differences = 1)
+DRH_15 <- diff(data_prediksi_15$RH, differences = 1)
+
+test_15 <- data.frame(DPC = DPC_15,DRH = DRH_15)
+```
+
+```{r}
+colnames(test_15) <- c("DPC", "DRH")
+```
+
+```{r}
+coefs <- summary(modelardl)$coefficients
+coefs
+```
+
+```{r}
+intercept <- coefs["(Intercept)", "Estimate"]
+b1 <- coefs["l.1.DPC", "Estimate"]
+b2 <- coefs["l.1.DRH", "Estimate"]
+```
+
+```{r}
+test_15$DTMA_pred <- intercept +
+  b1 * test_15$DPC +
+  b2 * test_15$DRH 
+```
+
+```{r}
+test_15$TMA_pred <- NA
+test_15$TMA_pred[1] <- data_prediksi_15$TMA[1] + test_15$DTMA_pred[1]
+
+for(i in 2:nrow(test_15)) {
+  test_15$TMA_pred[i] <- test_15$TMA_pred[i-1] + test_15$DTMA_pred[i]
+}
+```
+
+```{r}
+tanggal_prediksi <- seq.Date(from = as.Date("2025-01-01"), by = "day", length.out = nrow(test_15))
+```
+
+```{r}
+hasil_prediksi <- data.frame(
+  date = tanggal_prediksi,
+  TMA_actual = data_prediksi_15$TMA[-1],  # karena differencing
+  TMA_pred = test_15$TMA_pred
+)
+hasil_prediksi
+```
+
+```{r}
+# Tentukan nama file Excel
+nama_file_excel4 <- "hasil_peramalan.xlsx"
+
+# Tulis data frame ke file Excel 
+write_xlsx(hasil_prediksi, path = nama_file_excel4)
+```
+
+```{r}
+ggplot(hasil_prediksi, aes(x = date, y = TMA_pred)) +
+  geom_line(color = "blue", linewidth = 1) +
+  labs(
+    title = "Prediksi Tinggi Muka Air (TMA)",
+    x = "Tanggal",
+    y = "TMA Prediksi"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+plot(hasil_prediksi$date, hasil_prediksi$TMA_actual, type = "l", col = "black",
+     ylab = "TMA", xlab = "Tanggal", main = "TMA Aktual vs Prediksi", cex.axis = 1.2)
+lines(hasil_prediksi$date, hasil_prediksi$TMA_pred, col = "blue")
+legend("topleft", legend = c("Aktual", "Prediksi"), col = c("black", "blue"), lty = 1)
+```
+
+```{r}
+MAE <- mean(abs(hasil_prediksi$TMA_actual - hasil_prediksi$TMA_pred))
+RMSE <- sqrt(mean((hasil_prediksi$TMA_actual - hasil_prediksi$TMA_pred)^2))
+MAPE <- mean(abs((hasil_prediksi$TMA_actual - hasil_prediksi$TMA_pred) / hasil_prediksi$TMA_actual)) * 100
+
+cat("MAE:", MAE, "\n")
+cat("RMSE:", RMSE, "\n")
+cat("MAPE:", MAPE, "%\n")
+```
+
+Hasil peramalan menunjukkan bahwa nilai prediksi cenderung berada pada
+kisaran 650–660 dan cukup mengikuti nilai aktual pada periode dengan
+fluktuasi rendah. Namun, model belum mampu menangkap beberapa lonjakan
+ekstrem pada TMA. Meskipun demikian, diperoleh MAE sebesar 14.69, RMSE
+sebesar 22.83, dan MAPE sebesar 2.20%, yang menunjukkan tingkat
+kesalahan prediksi relatif rendah.
