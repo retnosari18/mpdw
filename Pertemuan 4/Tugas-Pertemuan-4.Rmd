@@ -1,0 +1,701 @@
+---
+title: "Tugas-Pertemuan-4"
+author: "Retno Sari | M0401241010"
+date: "2026-09-14"
+output: 
+  rmdformats::readthedown
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+# 1. MA(2) – Moving Average
+
+## a. Pembangkitan Manual
+
+Kode membangkitkan 300 data *white noise* dan kemudian membentuk MA(2)
+dengan
+
+$$Y_t = e_t + 0.4e_{t-1} + 0.6e_{t-2}$$
+
+Loop dimulai dari $i=3$ karena untuk menghitung $Y_t$ dibutuhkan
+$e_{t-1}$ dan $e_{t-2}$.
+
+```{r}
+set.seed(1234)
+
+n <- 300
+wn <- rnorm(n)
+
+ma2 <- c(1:n)
+
+for (i in 3:n) {
+  ma2[i] <- wn[i] + 0.4*wn[i-1] + 0.6*wn[i-2]
+}
+
+ma2
+```
+
+Hasil pembangkitan menghasilkan 300 pengamatan MA(2). Nilai $Y_t$
+berfluktuasi di sekitar nilai tengah tanpa pola deterministik yang
+terlihat. Setiap nilai dipengaruhi oleh *white noise* pada waktu
+sekarang serta dua waktu sebelumnya melalui koefisien 0.4 dan 0.6.
+
+## b. Dengan `arima.sim()`
+
+`arima.sim()` digunakan untuk membangkitkan MA(2) dengan orde (0,0,2)
+dan koefisien MA 0.4 dan 0.6. Hasilnya juga terdiri dari 300 pengamatan.
+
+```{r}
+ma2.sim <- arima.sim(
+  list(order = c(0,0,2), ma = c(0.4,0.6)),
+  n = 300
+)
+
+ma2.sim
+```
+
+Hasil `arima.sim()` menghasilkan deret MA(2) sebanyak 300 pengamatan
+dengan spesifikasi model yang sama seperti pembangkitan manual. Nilai
+pengamatan menunjukkan fluktuasi acak di sekitar nilai tengah sehingga
+secara umum hasil simulasi telah menggambarkan karakteristik proses
+MA(2).
+
+## c. Plot Time Series
+
+Digunakan untuk melihat pola $Y_t$ sepanjang waktu.
+
+```{r}
+plot.ts(ma2,
+        main = "Time Series MA(2)",
+        ylab = "Yt",
+        xlab = "Waktu")
+```
+
+Plot time series MA(2) menunjukkan bahwa data berfluktuasi di sekitar
+nilai tengah tanpa adanya tren naik atau turun yang sistematis. Ragam
+data juga relatif konstan sepanjang waktu. Hal ini menunjukkan
+karakteristik deret yang stasioner.
+
+## d. Plot ACF
+
+ACF digunakan untuk melihat hubungan antara $Y_t$ dengan pengamatan pada
+beberapa lag.
+
+```{r}
+acf(ma2,
+    main = "ACF MA(2)")
+```
+
+Plot ACF MA(2) menunjukkan korelasi positif pada lag 1 dan lag 2,
+kemudian korelasi turun dan mendekati nol pada lag berikutnya. Pola ini
+sesuai dengan karakteristik teoritis MA(2), yaitu autokorelasi hanya
+muncul sampai lag ke-2 dan terputus setelahnya (*cut off*).
+
+## e. Plot PACF
+
+PACF digunakan untuk melihat korelasi parsial pada setiap lag setelah
+pengaruh lag di antaranya diperhitungkan.
+
+```{r}
+pacf(ma2,
+     main = "PACF MA(2)")
+```
+
+Plot PACF MA(2) menunjukkan pola yang menurun secara bertahap (*tails
+off*) dan tidak terputus secara tegas pada lag tertentu. Pola ini sesuai
+dengan karakteristik proses MA, yaitu PACF cenderung mengalami peluruhan
+secara bertahap.
+
+## f. Plot EACF
+
+EACF digunakan untuk membantu mengidentifikasi orde MA dan AR
+berdasarkan pola tanda pada tabel EACF.
+
+```{r}
+TSA::eacf(ma2)
+```
+
+Hasil EACF menunjukkan pola yang dapat digunakan untuk mengidentifikasi
+model dengan komponen MA. Pola tersebut mendukung dugaan bahwa data
+memiliki komponen MA dengan orde 2.
+
+## g. Stasioneritas
+
+> Data hasil pembangkitan MA(2) dapat dikatakan stasioner karena plot
+> time series tidak menunjukkan adanya tren maupun perubahan ragam yang
+> sistematis sepanjang waktu. Selain itu, secara teori proses MA dengan
+> orde hingga merupakan proses stasioner.
+
+## h. Scatterplot $Y_t$ dengan $Y_{t−1}​$
+
+```{r}
+# Yt
+yt_ma2 <- ma2[-1]
+
+# Yt-1
+yt_1_ma2 <- ma2[-300]
+
+plot(y = yt_ma2,
+     x = yt_1_ma2,
+     main = "Scatterplot Yt dengan Yt-1",
+     xlab = "Yt-1",
+     ylab = "Yt")
+
+cor(yt_ma2, yt_1_ma2)
+```
+
+> Scatterplot menunjukkan hubungan positif antara $Y_t$ dan $Y_{t-1}$,
+> dengan korelasi simulasi sebesar **0.5296**. Hubungan ini menunjukkan
+> bahwa nilai $Y_t$ cenderung meningkat ketika nilai pada satu periode
+> sebelumnya meningkat.
+
+Korelasi antara $Y_t$ dengan $Y_{t−1}$ dari hasil simulasi mendekati
+perhitungan teoritis, yaitu:
+
+$$\rho_1=\frac{\theta_1+\theta_1\theta_2}{1+\theta_1^2+\theta_2^2}
+=\frac{0.4+(0.4)(0.6)}{1+(0.4)^2+(0.6)^2}
+=0.4211$$
+
+## i. Scatterplot $Y_t$ dengan $Y_{t−2​}$
+
+```{r}
+# Yt
+yt_ma2_2 <- ma2[-c(1,2)]
+
+# Yt-2
+yt_2_ma2 <- ma2[-c(299,300)]
+
+plot(y = yt_ma2_2,
+     x = yt_2_ma2,
+     main = "Scatterplot Yt dengan Yt-2",
+     xlab = "Yt-2",
+     ylab = "Yt")
+
+cor(yt_ma2_2, yt_2_ma2)
+```
+
+> Pada lag 2, hubungan antara $Y_t$ dan $Y_{t-2}$ masih terlihat
+> positif, dengan korelasi simulasi sebesar **0.4285**. Nilai korelasi
+> yang lebih rendah dibandingkan lag 1 menunjukkan bahwa hubungan antar
+> pengamatan mulai melemah ketika jarak lag bertambah.
+
+Korelasi antara $Y_t$ dengan $Y_{t−2}$ dari hasil simulasi mendekati
+perhitungan teoritis, yaitu:
+
+$$\rho_2=\frac{\theta_2}{1+\theta_1^2+\theta_2^2}
+=\frac{0.6}{1+(0.4)^2+(0.6)^2}
+=0.3947$$
+
+## j. Scatterplot $Y_t$ dengan $Y_{t-3}$
+
+```{r}
+# Yt
+yt_ma2_3 <- ma2[-c(1,2,3)]
+
+# Yt-3
+yt_3_ma2 <- ma2[-c(298,299,300)]
+
+plot(y = yt_ma2_3,
+     x = yt_3_ma2,
+     main = "Scatterplot Yt dengan Yt-3",
+     xlab = "Yt-3",
+     ylab = "Yt")
+
+cor(yt_ma2_3, yt_3_ma2)
+```
+
+> Memasuki lag 3, korelasi simulasi turun menjadi **0.0780**, sehingga
+> hubungan antara $Y_t$ dan $Y_{t-3}$ tergolong sangat lemah. Pola ini
+> menunjukkan bahwa ketergantungan antar pengamatan hampir tidak
+> terlihat setelah lag ke-2, sesuai dengan karakteristik **MA(2)** yang
+> secara teoritis memiliki autokorelasi nol pada lag lebih dari 2.
+
+Korelasi antara $Y_t$ dengan $Y_{t−3}$ hasil simulasi mendekati teori
+yang ada yaitu 0.
+
+$$\rho_3=0$$
+
+# 2. AR(2) –Autoregressive
+
+## a. Pembangkitan Manual
+
+Model yang digunakan adalah
+
+$$Y_t = e_t + 0.5Y_{t-1} + 0.2Y_{t-2}$$
+
+Jadi berbeda dengan MA(2), nilai sekarang dipengaruhi langsung oleh
+**nilai Y sebelumnya**, bukan hanya *white noise* sebelumnya.
+
+```{r}
+set.seed(1234)
+
+n <- 300
+wn <- rnorm(n)
+
+ar2 <- c(1:n)
+
+for (i in 3:n) {
+  ar2[i] <- wn[i] + 0.5*ar2[i-1] + 0.2*ar2[i-2]
+}
+
+ar2
+```
+
+Hasil pembangkitan menghasilkan 300 pengamatan AR(2). Nilai $Y_t$
+dibentuk dari *white noise* pada waktu sekarang serta dua pengamatan
+sebelumnya dengan koefisien masing-masing 0.5 dan 0.2. Oleh karena itu,
+nilai pengamatan cenderung memiliki ketergantungan terhadap nilai pada
+periode sebelumnya.
+
+## b. Dengan `arima.sim()`
+
+```{r}
+ar2.sim <- arima.sim(
+  list(order = c(2,0,0), ar = c(0.5,0.2)),
+  n = 300
+)
+
+ar2.sim
+```
+
+Hasil `arima.sim()` menghasilkan 300 pengamatan dengan spesifikasi AR(2)
+yang sama, yaitu koefisien AR sebesar 0.5 dan 0.2. Hasil simulasi
+menunjukkan adanya ketergantungan antarpengamatan yang terbentuk melalui
+dua lag sebelumnya.
+
+## c. Plot Time Series
+
+```{r}
+plot.ts(ar2,
+        main = "Time Series AR(2)",
+        ylab = "Yt",
+        xlab = "Waktu")
+```
+
+Plot time series AR(2) menunjukkan fluktuasi nilai sepanjang waktu tanpa
+pola tren yang sistematis. Meskipun terdapat rangkaian nilai yang
+cenderung bergerak searah pada beberapa periode, data tetap berfluktuasi
+di sekitar nilai tengah sehingga tidak menunjukkan pola nonstasioner
+yang jelas.
+
+## d. Plot ACF
+
+```{r}
+acf(ar2,
+    main = "ACF AR(2)")
+```
+
+Plot ACF AR(2) menunjukkan korelasi positif yang cukup kuat pada
+beberapa lag awal dan kemudian menurun secara bertahap. Pola *tails off*
+ini merupakan karakteristik proses AR, sehingga berbeda dengan MA(2)
+yang memiliki ACF terputus setelah lag ke-2.
+
+## e. Plot PACF
+
+```{r}
+pacf(ar2,
+     main = "PACF AR(2)")
+```
+
+Plot PACF AR(2) menunjukkan korelasi parsial yang kuat hingga lag ke-2,
+kemudian menurun dan mendekati nol pada lag berikutnya. Pola ini sesuai
+dengan karakteristik AR(2), yaitu PACF terputus setelah orde AR, yaitu
+pada lag ke-2.
+
+## f. Plot EACF
+
+```{r}
+TSA::eacf(ar2)
+```
+
+Hasil EACF menunjukkan pola yang mendukung adanya komponen AR dengan
+orde 2. Dengan demikian, hasil EACF konsisten dengan model AR(2) yang
+digunakan dalam pembangkitan data.
+
+## g. Stasioneritas
+
+> Data hasil pembangkitan AR(2) dapat dikatakan stasioner karena
+> memenuhi kondisi stasioneritas proses AR(2) dan plot time series tidak
+> menunjukkan tren yang sistematis. Nilai data tetap berfluktuasi di
+> sekitar nilai tengah sehingga karakteristik deret relatif stabil
+> sepanjang waktu.
+
+## h. Scatterplot $Y_t$ dengan $Y_{t−1}​$
+
+```{r}
+# Yt
+yt_ar2 <- ar2[-1]
+
+# Yt-1
+yt_1_ar2 <- ar2[-300]
+
+plot(y = yt_ar2,
+     x = yt_1_ar2,
+     main = "Scatterplot Yt dengan Yt-1",
+     xlab = "Yt-1",
+     ylab = "Yt")
+
+cor(yt_ar2, yt_1_ar2)
+```
+
+> Scatterplot menunjukkan hubungan positif antara $Y_t$ dan $Y_{t-1}$,
+> dengan korelasi sebesar 0.7173. Hal ini menunjukkan bahwa nilai $Y_t$
+> cenderung meningkat ketika $Y_{t-1}$ meningkat. Pola tersebut sesuai
+> dengan karakteristik model AR(2), di mana $Y_t$ dipengaruhi secara
+> langsung oleh $Y_{t-1}$.
+
+Korelasi antara $Y_t$ dengan $Y_{t−1}$ dari hasil simulasi mendekati
+perhitungan teoritis yaitu $\rho_1 = 0.625$.
+
+$$\rho_1=\frac{\phi_1}{1-\phi_2}
+=\frac{0.5}{1-0.2}
+=0.625$$
+
+## i. Scatterplot $Y_t$ dengan $Y_{t−2​}$
+
+```{r}
+# Yt
+yt_ar2_2 <- ar2[-c(1,2)]
+
+# Yt-2
+yt_2_ar2 <- ar2[-c(299,300)]
+
+plot(y = yt_ar2_2,
+     x = yt_2_ar2,
+     main = "Scatterplot Yt dengan Yt-2",
+     xlab = "Yt-2",
+     ylab = "Yt")
+
+cor(yt_ar2_2, yt_2_ar2)
+```
+
+> Scatterplot menunjukkan hubungan positif antara $Y_t$ dan $Y_{t-2}$,
+> dengan korelasi hasil simulasi sebesar 0.5513. Nilai tersebut relatif
+> mendekati korelasi teoritis sebesar 0.5125. Hal ini menunjukkan bahwa
+> $Y_t$ dan $Y_{t-2}$ memiliki hubungan positif, sesuai dengan
+> karakteristik model AR(2) yang melibatkan $Y_{t-2}$ dalam pembentukan
+> $Y_t$.
+
+Korelasi antara $Y_t$ dengan $Y_{t−2}$ dari hasil simulasi mendekati
+perhitungan teoritis, yaitu $\rho_2 = 0.5125$.
+$$\rho_2=\phi_1\rho_1+\phi_2
+=(0.5)(0.625)+0.2
+=0.5125$$
+
+## j. Scatterplot $Y_t$ dengan $Y_{t-3}$
+
+```{r}
+# Yt
+yt_ar2_3 <- ar2[-c(1,2,3)]
+
+# Yt-3
+yt_3_ar2 <- ar2[-c(298,299,300)]
+
+plot(y = yt_ar2_3,
+     x = yt_3_ar2,
+     main = "Scatterplot Yt dengan Yt-3",
+     xlab = "Yt-3",
+     ylab = "Yt")
+
+cor(yt_ar2_3, yt_3_ar2)
+```
+
+> Scatterplot menunjukkan hubungan positif antara $Y_t$ dan $Y_{t-3}$,
+> dengan korelasi hasil simulasi sebesar [nilai korelasi]. Nilai
+> tersebut relatif mendekati korelasi teoritis sebesar 0.38125. Hal ini
+> menunjukkan bahwa meskipun hubungan antara $Y_t$ dan $Y_{t-3}$ lebih
+> lemah dibandingkan lag sebelumnya, keduanya masih memiliki hubungan
+> positif. Pola ini sesuai dengan karakteristik model AR(2), di mana
+> pengaruh dari nilai masa lalu dapat tetap terbawa hingga beberapa lag.
+
+Korelasi antara $Y_t$ dengan $Y_{t−3}$ dari hasil simulasi mendekati
+perhitungan teoritis, yaitu$\rho_3 = 0.38125$.
+
+$$\rho_3=\phi_1\rho_2+\phi_2\rho_1
+=(0.5)(0.5125)+(0.2)(0.625)
+=0.38125$$
+
+# 3. ARMA(2,2) – Autoregressive Moving Average
+
+## a. Pembangkitan Manual
+
+```{r}
+arma.sim <- function(n, macoef, arcoef){
+  manum <- length(macoef)
+  arnum <- length(arcoef)
+  stopifnot(manum < n & arnum < n)
+  
+  wn <- rnorm(n, sd = 0.5)
+  init <- max(manum, arnum)
+  
+  arma <- wn[1:init]
+  for(i in {init+1}:n){
+    mastart <- i - manum
+    maend <- i-1
+    arstart <- i - arnum
+    arend <- i-1
+    
+    arma[i] <- sum(arcoef * arma[arstart:arend]) +
+      sum(macoef * wn[mastart:maend]) + wn[i]
+  }
+  return(arma)
+}
+```
+
+```{r}
+set.seed(1234)
+
+arma22 <- arma.sim(
+  n = 300,
+  macoef = c(0.4, 0.6),
+  arcoef = c(0.5, 0.2)
+)
+
+arma22
+```
+
+Hasil pembangkitan manual menghasilkan 300 pengamatan ARMA(2,2). Nilai
+$Y_t$ dipengaruhi oleh dua komponen, yaitu nilai pengamatan sebelumnya
+melalui koefisien AR sebesar 0.5 dan 0.2 serta *white noise* sebelumnya
+melalui koefisien MA sebesar 0.4 dan 0.6. Dengan demikian, proses
+ARMA(2,2) menggabungkan ketergantungan terhadap pengamatan masa lalu dan
+*shock* pada periode sebelumnya.
+
+## b. Dengan `arima.sim()`
+
+```{r}
+arma22.sim <- arima.sim(
+  list(
+    order = c(2,0,2),
+    ar = c(0.5,0.2),
+    ma = c(0.4,0.6)
+  ),
+  n = 300
+)
+
+arma22.sim
+```
+
+Hasil `arima.sim()` menghasilkan 300 pengamatan dengan spesifikasi
+ARMA(2,2) yang sama seperti pembangkitan manual. Data menunjukkan
+fluktuasi yang dipengaruhi oleh kombinasi nilai pengamatan sebelumnya
+dan *white noise* sebelumnya.
+
+## c. Plot Time Series
+
+```{r}
+plot.ts(arma22,
+        main = "Time Series ARMA(2,2)",
+        ylab = "Yt",
+        xlab = "Waktu")
+```
+
+Plot time series ARMA(2,2) menunjukkan data yang berfluktuasi sepanjang
+waktu tanpa tren yang sistematis. Meskipun terdapat beberapa periode
+dengan nilai relatif tinggi atau rendah secara berurutan, pola tersebut
+kembali berfluktuasi sehingga tidak menunjukkan perubahan ragam yang
+sistematis. Hal ini mendukung karakteristik proses yang stasioner.
+
+## d. Plot ACF
+
+```{r}
+acf(arma22,
+    main = "ACF ARMA(2,2)")
+```
+
+Plot ACF ARMA(2,2) menunjukkan korelasi positif yang kuat pada beberapa
+lag awal dan kemudian menurun secara bertahap. Pola *tails off* terjadi
+karena adanya komponen AR, sehingga korelasi tidak langsung terputus
+setelah lag ke-2 seperti pada MA(2).
+
+## e. Plot PACF
+
+```{r}
+pacf(arma22,
+     main = "PACF ARMA(2,2)")
+```
+
+Plot PACF ARMA(2,2) juga menunjukkan pola peluruhan secara bertahap dan
+tidak terputus secara tegas setelah lag ke-2. Hal ini terjadi karena
+proses ARMA memiliki kombinasi komponen AR dan MA, sehingga pola ACF
+maupun PACF umumnya tidak menunjukkan *cut off* yang sederhana seperti
+pada AR atau MA murni.
+
+## f. Plot EACF
+
+```{r}
+TSA::eacf(arma22)
+```
+
+Hasil EACF digunakan untuk membantu mengidentifikasi orde AR dan MA pada
+proses ARMA. Pola yang diperoleh mendukung keberadaan komponen AR dan MA
+sehingga konsisten dengan model ARMA(2,2) yang digunakan dalam simulasi.
+
+## g. Stasioneritas
+
+> Data hasil pembangkitan ARMA(2,2) dapat dikatakan stasioner karena
+> komponen AR memenuhi kondisi stasioneritas dan plot time series tidak
+> menunjukkan tren maupun perubahan ragam yang sistematis sepanjang
+> waktu.
+
+## h. Scatterplot $Y_t$ dengan $Y_{t−1}​$
+
+```{r}
+# Yt
+yt_arma22 <- arma22[-1]
+
+# Yt-1
+yt_1_arma22 <- arma22[-300]
+
+plot(y = yt_arma22,
+     x = yt_1_arma22,
+     main = "Scatterplot Yt dengan Yt-1",
+     xlab = "Yt-1",
+     ylab = "Yt")
+
+cor(yt_arma22, yt_1_arma22)
+```
+
+> Hubungan antara $Y_t$ dan $Y_{t-1}$ terlihat positif dan cukup kuat,
+> dengan korelasi simulasi sebesar **0.8822**. Nilai ini juga dekat
+> dengan korelasi teoritis **0.8592**, sehingga pola data hasil
+> pembangkitan sudah mencerminkan ketergantungan positif pada periode
+> sebelumnya.
+
+Model ARMA(2,2) yang digunakan adalah:
+
+$$Y_t=0.5Y_{t-1}+0.2Y_{t-2}
++e_t+0.4e_{t-1}+0.6e_{t-2}$$
+
+1.  Koefisien MA tak hingga dihitung terlebih dahulu, dengan:
+
+$$\psi_0=1$$
+
+$$\psi_1=\phi_1+\theta_1
+=(0.5)+(0.4)=0.9$$
+
+$$\psi_2=\phi_1\psi_1+\phi_2+\theta_2
+=(0.5)(0.9)+(0.2)+(0.6)=1.25$$
+
+2.  Persamaan autokovarians untuk $k=0,1,2$ adalah:
+
+$$\gamma_0-0.5\gamma_1-0.2\gamma_2=2.11\sigma_e^2$$
+
+$$0.8\gamma_1-0.5\gamma_0=0.94\sigma_e^2$$
+
+$$\gamma_2-0.5\gamma_1-0.2\gamma_0=0.6\sigma_e^2$$
+
+3.  Dengan $\sigma_e^2=1$, diperoleh:
+
+$$\gamma_0=5.0171,\quad
+\gamma_1=4.3107,\quad
+\gamma_2=3.7588$$
+
+Sehingga korelasi teoritis antara $Y_t$ dengan $Y_{t−1}$ adalah:
+
+$$\rho_1=\frac{\gamma_1}{\gamma_0}
+=\frac{4.3107}{5.0171}
+=0.8592$$
+
+## i. Scatterplot $Y_t$ dengan $Y_{t−2​}$
+
+```{r}
+# Yt
+yt_arma22_2 <- arma22[-c(1,2)]
+
+# Yt-2
+yt_2_arma22 <- arma22[-c(299,300)]
+
+plot(y = yt_arma22_2,
+     x = yt_2_arma22,
+     main = "Scatterplot Yt dengan Yt-2",
+     xlab = "Yt-2",
+     ylab = "Yt")
+
+cor(yt_arma22_2, yt_2_arma22)
+```
+
+> Pada lag 2, hubungan positif masih terlihat dengan korelasi simulasi
+> sebesar **0.7999**, sedangkan nilai teoritisnya sebesar **0.7492**.
+> Korelasi yang masih tinggi menunjukkan bahwa nilai $Y_t$ tidak hanya
+> berkaitan dengan satu periode sebelumnya, tetapi juga masih memiliki
+> keterkaitan dengan dua periode sebelumnya.
+
+Korelasi teoritis antara $Y_t$ dengan $Y_{t−2}$ adalah:
+
+$$\rho_2=\frac{\gamma_2}{\gamma_0}
+=\frac{3.7588}{5.0171}
+=0.7492$$
+
+## j. Scatterplot $Y_t$ dengan $Y_{t-3}$
+
+```{r}
+# Yt
+yt_arma22_3 <- arma22[-c(1,2,3)]
+
+# Yt-3
+yt_3_arma22 <- arma22[-c(298,299,300)]
+
+plot(y = yt_arma22_3,
+     x = yt_3_arma22,
+     main = "Scatterplot Yt dengan Yt-3",
+     xlab = "Yt-3",
+     ylab = "Yt")
+
+cor(yt_arma22_3, yt_3_arma22)
+```
+
+> Memasuki lag 3, korelasi simulasi turun menjadi **0.6439**, dengan
+> nilai teoritis sebesar **0.5464**. Meskipun lebih rendah dibandingkan
+> lag 1 dan lag 2, hubungan yang terbentuk tetap positif. Hal ini
+> menunjukkan bahwa ketergantungan dalam proses ARMA(2,2) masih
+> berlanjut pada lag yang lebih jauh.
+
+Untuk menghitung korelasi teoritis lag 3 dan seterusnya digunakan
+hubungan AR:
+
+$$\rho_k=\phi_1\rho_{k-1}+\phi_2\rho_{k-2}$$
+
+Sehingga, korelasi teoritis antara $Y_t$ dengan $Y_{t−3}$ adalah:
+
+$$\rho_3=(0.5)(0.7492)+(0.2)(0.8592)
+=0.5464$$
+
+# 4. Perbandingan Hasil
+
+```{r}
+hasil_korelasi <- data.frame(
+  Model = rep(c("MA(2)", "AR(2)", "ARMA(2,2)"), each = 3),
+  Lag = rep(1:3, 3),
+  Simulasi = c(
+    cor(ma2[-c(1)], ma2[-length(ma2)]),
+    cor(ma2[-c(1,2)], ma2[-c(length(ma2)-1, length(ma2))]),
+    cor(ma2[-c(1,2,3)], ma2[-c(length(ma2)-2, length(ma2)-1, length(ma2))]),
+    
+    cor(ar2[-c(1)], ar2[-length(ar2)]),
+    cor(ar2[-c(1,2)], ar2[-c(length(ar2)-1, length(ar2))]),
+    cor(ar2[-c(1,2,3)], ar2[-c(length(ar2)-2, length(ar2)-1, length(ar2))]),
+    
+    cor(arma22[-c(1)], arma22[-length(arma22)]),
+    cor(arma22[-c(1,2)], arma22[-c(length(arma22)-1, length(arma22))]),
+    cor(arma22[-c(1,2,3)], arma22[-c(length(arma22)-2, length(arma22)-1, length(arma22))])
+  ),
+  Teoritis = c(
+    0.4211, 0.3947, 0,
+    0.6250, 0.5125, 0.3813,
+    0.8592, 0.7492, 0.5464
+  )
+)
+
+hasil_korelasi
+```
+
+Hasil perbandingan menunjukkan bahwa korelasi simulasi pada ketiga model
+secara umum mendekati nilai teoritis. MA(2) memiliki korelasi yang
+mendekati nol setelah lag ke-2, sedangkan AR(2) dan ARMA(2,2) tetap
+menunjukkan korelasi positif hingga lag ke-3 dengan kecenderungan
+menurun. Perbedaan nilai simulasi dan teoritis disebabkan oleh variasi
+pada korelasi sampel hasil pembangkitan. Pola tersebut sesuai dengan
+karakteristik masing-masing model, yaitu *cut off* pada MA(2) dan *tails
+off* pada model yang memiliki komponen AR.
